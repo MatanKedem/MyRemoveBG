@@ -1,6 +1,6 @@
 package com.myremovebg;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -20,25 +20,50 @@ public class ExternalBackgroundRemovalService {
             .connectTimeout(Duration.ofSeconds(20))
             .build();
 
-    @Value("${REMOVEBG_API_KEY:}")
-    private String removeBgApiKey;
+    private final Environment environment;
 
-    @Value("${CLIPDROP_API_KEY:}")
-    private String clipdropApiKey;
+    public ExternalBackgroundRemovalService(Environment environment) {
+        this.environment = environment;
+    }
 
-    @Value("${PHOTOROOM_API_KEY:}")
-    private String photoRoomApiKey;
+    private String apiKey(String envName, String propertyName, String... aliases) {
+        String value = System.getenv(envName);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = environment.getProperty(envName);
+        if (value != null && !value.isBlank()) return value.trim();
+        value = environment.getProperty(propertyName);
+        if (value != null && !value.isBlank()) return value.trim();
+        for (String alias : aliases) {
+            value = System.getenv(alias);
+            if (value != null && !value.isBlank()) return value.trim();
+            value = environment.getProperty(alias);
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "";
+    }
+
+    private String removeBgApiKey() {
+        return apiKey("REMOVEBG_API_KEY", "removebg.api-key", "REMOVE_BG_API_KEY", "REMOVEBG_KEY");
+    }
+
+    private String clipdropApiKey() {
+        return apiKey("CLIPDROP_API_KEY", "clipdrop.api-key", "CLIPDROP_KEY");
+    }
+
+    private String photoRoomApiKey() {
+        return apiKey("PHOTOROOM_API_KEY", "photoroom.api-key", "PHOTOROOM_KEY");
+    }
 
     public boolean isRemoveBgConfigured() {
-        return removeBgApiKey != null && !removeBgApiKey.isBlank();
+        return !removeBgApiKey().isBlank();
     }
 
     public boolean isClipdropConfigured() {
-        return clipdropApiKey != null && !clipdropApiKey.isBlank();
+        return !clipdropApiKey().isBlank();
     }
 
     public boolean isPhotoRoomConfigured() {
-        return photoRoomApiKey != null && !photoRoomApiKey.isBlank();
+        return !photoRoomApiKey().isBlank();
     }
 
     public byte[] removeWithRemoveBg(byte[] image) throws Exception {
@@ -52,7 +77,7 @@ public class ExternalBackgroundRemovalService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.remove.bg/v1.0/removebg"))
                 .timeout(Duration.ofSeconds(90))
-                .header("X-Api-Key", removeBgApiKey.trim())
+                .header("X-Api-Key", removeBgApiKey())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .header("Accept", "image/png")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
@@ -70,7 +95,7 @@ public class ExternalBackgroundRemovalService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://clipdrop-api.co/remove-background/v1"))
                 .timeout(Duration.ofSeconds(90))
-                .header("x-api-key", clipdropApiKey.trim())
+                .header("x-api-key", clipdropApiKey())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .header("Accept", "image/png")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
@@ -89,7 +114,7 @@ public class ExternalBackgroundRemovalService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://sdk.photoroom.com/v1/segment"))
                 .timeout(Duration.ofSeconds(90))
-                .header("x-api-key", photoRoomApiKey.trim())
+                .header("x-api-key", photoRoomApiKey())
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .header("Accept", "image/png")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body))
