@@ -36,6 +36,7 @@ public class BackgroundController {
             case "local" -> localService.removeBackground(input);
             case "removebg" -> externalService.removeWithRemoveBg(input);
             case "clipdrop" -> externalService.removeWithClipdrop(input);
+            case "photoroom" -> externalService.removeWithPhotoRoom(input);
             default -> throw new IllegalArgumentException("Unknown provider: " + provider);
         };
 
@@ -56,6 +57,9 @@ public class BackgroundController {
         result.put("clipdrop", Map.of(
                 "configured", externalService.isClipdropConfigured(),
                 "label", "Clipdrop API"));
+        result.put("photoroom", Map.of(
+                "configured", externalService.isPhotoRoomConfigured(),
+                "label", "PhotoRoom API"));
         return result;
     }
 }
