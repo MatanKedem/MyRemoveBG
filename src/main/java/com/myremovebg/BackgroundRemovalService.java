@@ -244,7 +244,8 @@ public class BackgroundRemovalService {
      *
      * State values:
      * 0 = not classified, 1 = exterior background, 2 = small enclosed region,
-     * 3 = large enclosed white foreground.
+     * 3 = large enclosed white foreground,
+     * 4 = non-white artwork foreground (preserved exactly).
      */
     private byte[] classifyWhiteBorderRegions(BufferedImage image) {
         int width = image.getWidth();
@@ -329,6 +330,19 @@ public class BackgroundRemovalService {
                         queue[tail++] = next;
                     }
                 }
+            }
+        }
+
+        // On sparse flat artwork, every opaque non-white pixel is artwork.
+        // Preserve these pixels directly instead of allowing a low-resolution
+        // neural mask to erase thin lettering, arrows, and logo strokes.
+        for (int index = 0; index < pixelCount; index++) {
+            int x = index % width;
+            int y = index / width;
+            int rgb = image.getRGB(x, y);
+            if (((rgb >>> 24) & 255) > 32
+                    && !isNearWhiteBackgroundPixel(rgb)) {
+                state[index] = 4;
             }
         }
 
@@ -430,7 +444,7 @@ public class BackgroundRemovalService {
                     byte region = whiteRegions[y * width + x];
                     if (region == 1) {
                         outputAlpha = 0;
-                    } else if (region == 3) {
+                    } else if (region == 3 || region == 4) {
                         outputAlpha = sourceAlpha;
                     }
                 }
