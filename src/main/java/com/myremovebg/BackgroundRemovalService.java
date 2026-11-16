@@ -41,6 +41,7 @@ public class BackgroundRemovalService {
         System.out.println("BIREFNET AI READY");
 
         System.out.println("FUSION ENGINE READY");
+        System.out.println("GRAPHICS PRESERVATION ENGINE READY");
     }
 
     private float[][] runModel(
@@ -247,7 +248,7 @@ public class BackgroundRemovalService {
      * 3 = large enclosed white foreground,
      * 4 = non-white artwork foreground (preserved exactly).
      */
-    private byte[] classifyWhiteBorderRegions(BufferedImage image) {
+    private byte[] classifyWhiteBorderRegions(BufferedImage image, boolean forceGraphicsMode) {
         int width = image.getWidth();
         int height = image.getHeight();
         long pixelCountLong = (long) width * height;
@@ -272,7 +273,7 @@ public class BackgroundRemovalService {
 
         // Only activate this cleanup on sparse, flat artwork with a white canvas.
         if (whiteBorderCount < borderCount * 0.65d
-                || !looksLikeFlatWhiteArtwork(image)) {
+                || (!forceGraphicsMode && !looksLikeFlatWhiteArtwork(image))) {
             return null;
         }
 
@@ -397,6 +398,15 @@ public class BackgroundRemovalService {
     }
 
     public byte[] removeBackground(byte[] bytes) throws Exception {
+        return removeBackground(bytes, "auto");
+    }
+
+    public byte[] removeBackground(byte[] bytes, String mode) throws Exception {
+        String processingMode = mode == null ? "auto" : mode.toLowerCase();
+        if (!processingMode.equals("auto") && !processingMode.equals("graphics")
+                && !processingMode.equals("photo")) {
+            throw new IllegalArgumentException("Unknown local processing mode: " + processingMode);
+        }
         BufferedImage original = ImageIO.read(new ByteArrayInputStream(bytes));
         if (original == null) {
             throw new IOException("Invalid image");
@@ -414,9 +424,12 @@ public class BackgroundRemovalService {
         float[][] biref = toProbabilityMask(runModel(
                 birefSession, birefInput, birefOutput, original, BIREF_SIZE));
 
-        byte[] whiteRegions = classifyWhiteBorderRegions(original);
+        byte[] whiteRegions = processingMode.equals("photo")
+                ? null : classifyWhiteBorderRegions(original, processingMode.equals("graphics"));
         if (whiteRegions != null) {
-            System.out.println("WHITE BACKGROUND CLEANUP ENABLED");
+            System.out.println("WHITE BACKGROUND CLEANUP ENABLED (" + processingMode + ")");
+        } else if (processingMode.equals("graphics")) {
+            System.out.println("GRAPHICS MODE: image does not have a sufficiently white border; using AI mask");
         }
 
         int width = original.getWidth();
