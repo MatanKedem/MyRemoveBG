@@ -17,17 +17,13 @@ public class BackgroundRemovalService {
 
     private static final int U2_SIZE = 320;
     private static final int BIREF_SIZE = 384;
-    private static final int ISNET_SIZE = 1024;
 
     private OrtEnvironment env;
     private OrtSession u2Session;
     private OrtSession birefSession;
-    private OrtSession isnetSession;
 
     private String u2Input, u2Output;
     private String birefInput, birefOutput;
-    private String isnetInput;
-    private String[] isnetOutputs;
 
     @PostConstruct
     public void init() throws Exception {
@@ -43,15 +39,6 @@ public class BackgroundRemovalService {
 
         System.out.println("U2NET AI READY");
         System.out.println("BIREFNET AI READY");
-
-        isnetSession = env.createSession("models/isnet.onnx");
-        isnetInput = isnetSession.getInputNames().iterator().next();
-        isnetOutputs = isnetSession.getOutputNames().toArray(new String[0]);
-
-        System.out.println("ISNET AI READY");
-        for (String name : isnetOutputs) {
-            System.out.println("ISNET OUTPUT AVAILABLE: " + name);
-        }
 
         System.out.println("FUSION ENGINE READY");
     }
@@ -110,23 +97,42 @@ public class BackgroundRemovalService {
         }
     }
 
-    private float[][] normalize(float[][] mask) {
+    /**
+     * Converts model output to probabilities without stretching each image's
+     * values independently. BiRefNet exports may expose logits, while some
+     * exports already include sigmoid; detect the range and handle both.
+     */
+    private float[][] toProbabilityMask(float[][] mask) {
         float min = Float.MAX_VALUE;
         float max = -Float.MAX_VALUE;
 
         for (float[] row : mask) {
             for (float value : row) {
+                if (!Float.isFinite(value)) continue;
                 min = Math.min(min, value);
                 max = Math.max(max, value);
             }
         }
 
-        float range = Math.max(max - min, 0.000001f);
+        boolean logits = min < -0.0001f || max > 1.0001f;
         float[][] result = new float[mask.length][mask[0].length];
 
         for (int y = 0; y < mask.length; y++) {
             for (int x = 0; x < mask[y].length; x++) {
-                result[y][x] = clamp((mask[y][x] - min) / range);
+                float value = mask[y][x];
+                if (!Float.isFinite(value)) {
+                    result[y][x] = 0f;
+                } else if (logits) {
+                    // Numerically stable sigmoid.
+                    if (value >= 0f) {
+                        result[y][x] = 1f / (1f + (float) Math.exp(-Math.min(value, 80f)));
+                    } else {
+                        float exp = (float) Math.exp(Math.max(value, -80f));
+                        result[y][x] = exp / (1f + exp);
+                    }
+                } else {
+                    result[y][x] = clamp(value);
+                }
             }
         }
 
@@ -374,85 +380,23 @@ public class BackgroundRemovalService {
         return state;
     }
 
-    private void diagnoseIsnet(BufferedImage original)
-            throws Exception {
-
-        BufferedImage resized = new BufferedImage(
-                ISNET_SIZE, ISNET_SIZE, BufferedImage.TYPE_INT_RGB);
-
-        Graphics2D g = resized.createGraphics();
-        try {
-            g.setRenderingHint(
-                    RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.drawImage(original, 0, 0, ISNET_SIZE, ISNET_SIZE, null);
-        } finally {
-            g.dispose();
-        }
-
-        float[] input = new float[3 * ISNET_SIZE * ISNET_SIZE];
-
-        for (int y = 0; y < ISNET_SIZE; y++) {
-            for (int x = 0; x < ISNET_SIZE; x++) {
-                int rgb = resized.getRGB(x, y);
-                input[y * ISNET_SIZE + x] =
-                        (((rgb >> 16) & 255) / 255f) * 2f - 1f;
-                input[ISNET_SIZE * ISNET_SIZE + y * ISNET_SIZE + x] =
-                        (((rgb >> 8) & 255) / 255f) * 2f - 1f;
-                input[2 * ISNET_SIZE * ISNET_SIZE + y * ISNET_SIZE + x] =
-                        ((rgb & 255) / 255f) * 2f - 1f;
-            }
-        }
-
-        try (OnnxTensor tensor = OnnxTensor.createTensor(
-                    env, FloatBuffer.wrap(input),
-                    new long[]{1, 3, ISNET_SIZE, ISNET_SIZE});
-             OrtSession.Result result = isnetSession.run(
-                    Collections.singletonMap(isnetInput, tensor))) {
-
-            for (String name : isnetOutputs) {
-                Object value = result.get(name).orElseThrow();
-                if (!(value instanceof OnnxTensor outputTensor)) continue;
-
-                float[][][][] mask = (float[][][][]) outputTensor.getValue();
-                if (mask.length == 0 || mask[0].length == 0) continue;
-
-                float min = Float.MAX_VALUE;
-                float max = -Float.MAX_VALUE;
-                double sum = 0;
-                long count = 0;
-
-                for (float[] row : mask[0][0]) {
-                    for (float item : row) {
-                        min = Math.min(min, item);
-                        max = Math.max(max, item);
-                        sum += item;
-                        count++;
-                    }
-                }
-
-                if (count > 0) {
-                    System.out.printf(
-                            "ISNET OUTPUT %s | MIN: %.5f | MAX: %.5f | AVG: %.5f%n",
-                            name, min, max, sum / count);
-                }
-            }
-        }
-    }
-
     public byte[] removeBackground(byte[] bytes) throws Exception {
         BufferedImage original = ImageIO.read(new ByteArrayInputStream(bytes));
         if (original == null) {
             throw new IOException("Invalid image");
         }
+        long pixels = (long) original.getWidth() * original.getHeight();
+        if (pixels > 25_000_000L) {
+            throw new IOException("Image is too large. Maximum supported size is 25 megapixels.");
+        }
 
         System.out.println("Running U2NET...");
-        float[][] u2 = normalize(runModel(
+        float[][] u2 = toProbabilityMask(runModel(
                 u2Session, u2Input, u2Output, original, U2_SIZE));
 
         System.out.println("Running BiRefNet...");
-        float[][] biref = runModel(
-                birefSession, birefInput, birefOutput, original, BIREF_SIZE);
+        float[][] biref = toProbabilityMask(runModel(
+                birefSession, birefInput, birefOutput, original, BIREF_SIZE));
 
         byte[] whiteRegions = classifyWhiteBorderRegions(original);
         if (whiteRegions != null) {
@@ -472,11 +416,9 @@ public class BackgroundRemovalService {
                 float b = clamp(sample(biref, nx, ny));
                 float u = clamp(sample(u2, nx, ny));
 
-                // Keep the existing model fusion unchanged; cleanup is a separate final step.
-                float alpha = b * 0.70f + u * 0.30f;
-                if (u > 0.65f && b > 0.20f) {
-                    alpha = Math.max(alpha, Math.min(u, b + 0.12f));
-                }
+                // BiRefNet is the primary high-detail mask. U2NetP contributes
+                // a small stabilizing vote without washing out fine transparent edges.
+                float alpha = b * 0.90f + u * 0.10f;
 
                 int rgb = original.getRGB(x, y);
                 int sourceAlpha = (rgb >>> 24) & 255;
