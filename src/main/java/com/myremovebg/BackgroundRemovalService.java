@@ -16,7 +16,7 @@ import java.util.Arrays;
 public class BackgroundRemovalService {
 
     private static final int U2_SIZE = 320;
-    private static final int BIREF_SIZE = 512;
+    private static final int BIREF_SIZE = 384;
 
     private OrtEnvironment env;
     private OrtSession u2Session;
