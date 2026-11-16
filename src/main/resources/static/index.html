@@ -41,6 +41,7 @@ footer{text-align:center;color:#999;padding:40px;font-size:13px}
 <option value="local">MyRemoveBG AI · Local models</option>
 <option value="removebg">remove.bg API · Preview quality</option>
 <option value="clipdrop">Clipdrop API</option>
+<option value="photoroom">PhotoRoom API</option>
 </select>
 <p id="providerInfo" style="color:#777;font-size:12px;margin:7px 0 0">Your image is processed by the selected engine.</p>
 </div>
@@ -104,7 +105,8 @@ providerSelect.addEventListener('change', () => {
     const descriptions = {
         local: 'Runs on this server using the built-in AI models.',
         removebg: 'Uses remove.bg. Preview output uses a limited free-call allowance.',
-        clipdrop: 'Uses Clipdrop credits from the server API key.'
+        clipdrop: 'Uses Clipdrop credits from the server API key.',
+        photoroom: 'Uses PhotoRoom background removal API.'
     };
     providerInfo.textContent = descriptions[providerSelect.value] || '';
 });
