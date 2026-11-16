@@ -35,6 +35,15 @@ footer{text-align:center;color:#999;padding:40px;font-size:13px}
 <main>
 <h1>Remove Image Background</h1>
 <div class="subtitle">Remove backgrounds from images automatically with AI.</div>
+<div style="max-width:650px;margin:0 auto 18px;text-align:left">
+<label for="provider" style="display:block;font-weight:bold;margin-bottom:8px">AI engine</label>
+<select id="provider" style="width:100%;padding:13px;border:1px solid #d7dce8;border-radius:9px;background:white;font-size:15px">
+<option value="local">MyRemoveBG AI · Local models</option>
+<option value="removebg">remove.bg API · Preview quality</option>
+<option value="clipdrop">Clipdrop API</option>
+</select>
+<p id="providerInfo" style="color:#777;font-size:12px;margin:7px 0 0">Your image is processed by the selected engine.</p>
+</div>
 <label class="upload" for="file">
 <div class="upload-icon">☁</div>
 <strong>Upload an image</strong>
@@ -67,6 +76,40 @@ const preview = document.getElementById('preview');
 const image = document.getElementById('image');
 const button = document.getElementById('removeBtn');
 const status = document.getElementById('status');
+const providerSelect = document.getElementById('provider');
+const providerInfo = document.getElementById('providerInfo');
+
+async function loadProviders() {
+    try {
+        const response = await fetch('/api/providers');
+        if (!response.ok) return;
+        const providers = await response.json();
+
+        for (const option of providerSelect.options) {
+            const info = providers[option.value];
+            if (!info) continue;
+            if (!info.configured) {
+                option.disabled = true;
+                if (option.value !== 'local') {
+                    option.textContent += ' · API key not configured';
+                }
+            }
+        }
+    } catch (error) {
+        providerInfo.textContent = 'Provider availability could not be checked.';
+    }
+}
+
+providerSelect.addEventListener('change', () => {
+    const descriptions = {
+        local: 'Runs on this server using the built-in AI models.',
+        removebg: 'Uses remove.bg. Preview output uses a limited free-call allowance.',
+        clipdrop: 'Uses Clipdrop credits from the server API key.'
+    };
+    providerInfo.textContent = descriptions[providerSelect.value] || '';
+});
+
+loadProviders();
 
 file.addEventListener('change', () => {
     if (!file.files.length) return;
@@ -86,6 +129,7 @@ button.addEventListener('click', async () => {
     try {
         const data = new FormData();
         data.append('image', file.files[0]);
+        data.append('provider', document.getElementById('provider').value);
 
         const response = await fetch('/api/remove-background', {
             method: 'POST',
