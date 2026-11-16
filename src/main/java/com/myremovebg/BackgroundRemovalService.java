@@ -10,6 +10,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.FloatBuffer;
 import java.util.Collections;
+import java.util.Arrays;
 
 @Service
 public class BackgroundRemovalService {
@@ -168,6 +169,67 @@ public class BackgroundRemovalService {
     }
 
     /**
+     * Limits the white-canvas cleanup to sparse, flat artwork.
+     * This avoids color-keying ordinary photographs with textured subjects.
+     */
+    private boolean looksLikeFlatWhiteArtwork(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int step = Math.max(1, Math.max(width, height) / 160);
+        int[] histogram = new int[512];
+        int samples = 0;
+        int whiteSamples = 0;
+        int foregroundSamples = 0;
+        int distinctColors = 0;
+
+        for (int y = 0; y < height; y += step) {
+            for (int x = 0; x < width; x += step) {
+                samples++;
+                int rgb = image.getRGB(x, y);
+
+                if (isNearWhiteBackgroundPixel(rgb)) {
+                    whiteSamples++;
+                    continue;
+                }
+
+                if (((rgb >>> 24) & 255) <= 32) {
+                    continue;
+                }
+
+                foregroundSamples++;
+                int red = (rgb >>> 16) & 255;
+                int green = (rgb >>> 8) & 255;
+                int blue = rgb & 255;
+                int bucket = ((red >> 5) << 6)
+                        | ((green >> 5) << 3)
+                        | (blue >> 5);
+
+                if (histogram[bucket] == 0) {
+                    distinctColors++;
+                }
+                histogram[bucket]++;
+            }
+        }
+
+        if (samples == 0
+                || whiteSamples / (double) samples < 0.65d
+                || foregroundSamples / (double) samples < 0.005d
+                || foregroundSamples / (double) samples > 0.35d
+                || distinctColors > 64) {
+            return false;
+        }
+
+        Arrays.sort(histogram);
+        int topColors = 0;
+        for (int i = histogram.length - 1;
+             i >= Math.max(0, histogram.length - 8); i--) {
+            topColors += histogram[i];
+        }
+
+        return topColors / (double) foregroundSamples >= 0.70d;
+    }
+
+    /**
      * Finds near-white pixels connected to the image borders and marks them
      * as background. Large enclosed white regions are kept opaque, which
      * preserves things such as the white paper inside a bordered card.
@@ -199,8 +261,9 @@ public class BackgroundRemovalService {
             if (isNearWhiteBackgroundPixel(image.getRGB(width - 1, y))) whiteBorderCount++;
         }
 
-        // Only activate this cleanup when the image clearly has a white canvas.
-        if (whiteBorderCount < borderCount * 0.65d) {
+        // Only activate this cleanup on sparse, flat artwork with a white canvas.
+        if (whiteBorderCount < borderCount * 0.65d
+                || !looksLikeFlatWhiteArtwork(image)) {
             return null;
         }
 
@@ -382,9 +445,6 @@ public class BackgroundRemovalService {
         if (original == null) {
             throw new IOException("Invalid image");
         }
-
-        System.out.println("Running ISNET diagnostics...");
-        diagnoseIsnet(original);
 
         System.out.println("Running U2NET...");
         float[][] u2 = normalize(runModel(
