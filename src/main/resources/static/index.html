@@ -23,6 +23,8 @@ button{border:0;border-radius:9px;background:#426cf5;color:white;padding:15px 28
 button:hover{background:#3158d8}
 #preview{display:none;max-width:650px;margin:30px auto}
 #preview img{max-width:100%;max-height:350px;border-radius:12px}
+#resultCanvas{display:inline-block;max-width:100%;padding:12px;border-radius:12px;background-color:#e8e8e8;background-image:linear-gradient(45deg,#c9c9c9 25%,transparent 25%),linear-gradient(-45deg,#c9c9c9 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#c9c9c9 75%),linear-gradient(-45deg,transparent 75%,#c9c9c9 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0}
+#resultImage{display:block;max-width:100%;max-height:520px;object-fit:contain}
 footer{text-align:center;color:#999;padding:40px;font-size:13px}
 @media(max-width:600px){h1{font-size:34px}nav{gap:10px;font-size:12px}header{padding:0 4%}}
 </style>
@@ -60,7 +62,7 @@ footer{text-align:center;color:#999;padding:40px;font-size:13px}
 </div>
 <div id="result" style="display:none;margin-top:25px">
 <h3>Background removed!</h3>
-<img id="resultImage" alt="Background removed">
+<div id="resultCanvas"><img id="resultImage" alt="Background removed with transparent areas shown as a checkerboard"></div>
 <br>
 <a id="download" download="background-removed.png"
 style="display:inline-block;margin-top:15px;color:#426cf5;font-weight:bold">
