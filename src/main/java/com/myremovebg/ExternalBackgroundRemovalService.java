@@ -20,10 +20,10 @@ public class ExternalBackgroundRemovalService {
             .connectTimeout(Duration.ofSeconds(20))
             .build();
 
-    @Value("${removebg.api-key:}")
+    @Value("${REMOVEBG_API_KEY:}")
     private String removeBgApiKey;
 
-    @Value("${clipdrop.api-key:}")
+    @Value("${CLIPDROP_API_KEY:}")
     private String clipdropApiKey;
 
     public boolean isRemoveBgConfigured() {
