@@ -26,12 +26,19 @@ public class ExternalBackgroundRemovalService {
     @Value("${CLIPDROP_API_KEY:}")
     private String clipdropApiKey;
 
+    @Value("${PHOTOROOM_API_KEY:}")
+    private String photoRoomApiKey;
+
     public boolean isRemoveBgConfigured() {
         return removeBgApiKey != null && !removeBgApiKey.isBlank();
     }
 
     public boolean isClipdropConfigured() {
         return clipdropApiKey != null && !clipdropApiKey.isBlank();
+    }
+
+    public boolean isPhotoRoomConfigured() {
+        return photoRoomApiKey != null && !photoRoomApiKey.isBlank();
     }
 
     public byte[] removeWithRemoveBg(byte[] image) throws Exception {
@@ -70,6 +77,25 @@ public class ExternalBackgroundRemovalService {
                 .build();
 
         return sendImageRequest(request, "Clipdrop");
+    }
+
+    public byte[] removeWithPhotoRoom(byte[] image) throws Exception {
+        requireKey(isPhotoRoomConfigured(), "PhotoRoom");
+        String boundary = "----MyRemoveBG" + UUID.randomUUID();
+        byte[] body = multipart(boundary,
+                new Part("image_file", "upload.png", "image/png", image),
+                new Part("format", null, "text/plain", "png".getBytes(StandardCharsets.UTF_8)));
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://sdk.photoroom.com/v1/segment"))
+                .timeout(Duration.ofSeconds(90))
+                .header("x-api-key", photoRoomApiKey.trim())
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Accept", "image/png")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                .build();
+
+        return sendImageRequest(request, "PhotoRoom");
     }
 
     private byte[] sendImageRequest(HttpRequest request, String provider) throws Exception {
