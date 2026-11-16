@@ -16,7 +16,7 @@ import java.util.Arrays;
 public class BackgroundRemovalService {
 
     private static final int U2_SIZE = 320;
-    private static final int BIREF_SIZE = 384;
+    private static final int BIREF_SIZE = 512;
 
     private OrtEnvironment env;
     private OrtSession u2Session;
@@ -170,8 +170,10 @@ public class BackgroundRemovalService {
         int blue = rgb & 255;
 
         return alpha > 32
-                && red >= 235 && green >= 235 && blue >= 235
-                && (765 - red - green - blue) <= 45;
+                && red >= 225 && green >= 225 && blue >= 225
+                && (765 - red - green - blue) <= 75
+                && (Math.max(red, Math.max(green, blue))
+                    - Math.min(red, Math.min(green, blue))) <= 28;
     }
 
     /**
