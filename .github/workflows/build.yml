@@ -1,0 +1,48 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository and LFS models
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Verify model files are real LFS downloads
+        run: |
+          test -s models/birefnet-lite.onnx
+          test "$(stat -c%s models/birefnet-lite.onnx)" -gt 100000000
+          test -s models/isnet.onnx
+          test -s models/u2netp.onnx
+
+      - name: Run Maven tests
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp clean test
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          if-no-files-found: ignore
