@@ -25,7 +25,8 @@ public class BackgroundController {
     )
     public ResponseEntity<byte[]> remove(
             @RequestParam("image") MultipartFile image,
-            @RequestParam(defaultValue = "local") String provider) throws Exception {
+            @RequestParam(defaultValue = "local") String provider,
+            @RequestParam(defaultValue = "auto") String mode) throws Exception {
 
         if (image.isEmpty()) {
             return ResponseEntity.badRequest().build();
@@ -33,7 +34,7 @@ public class BackgroundController {
 
         byte[] input = image.getBytes();
         byte[] result = switch (provider.toLowerCase()) {
-            case "local" -> localService.removeBackground(input);
+            case "local" -> localService.removeBackground(input, mode);
             case "removebg" -> externalService.removeWithRemoveBg(input);
             case "clipdrop" -> externalService.removeWithClipdrop(input);
             case "photoroom" -> externalService.removeWithPhotoRoom(input);
