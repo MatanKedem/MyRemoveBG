@@ -46,6 +46,15 @@ footer{text-align:center;color:#999;padding:40px;font-size:13px}
 <option value="photoroom">PhotoRoom API</option>
 </select>
 <p id="providerInfo" style="color:#777;font-size:12px;margin:7px 0 0">Your image is processed by the selected engine.</p>
+<div id="localModeWrap" style="margin-top:16px">
+<label for="localMode" style="display:block;font-weight:bold;margin-bottom:8px">Local processing mode</label>
+<select id="localMode" style="width:100%;padding:13px;border:1px solid #d7dce8;border-radius:9px;background:white;font-size:15px">
+<option value="auto">Auto · Choose the best processing automatically</option>
+<option value="graphics">Graphics · Logos, text, drawings and flat artwork</option>
+<option value="photo">Photo · People, objects and real-world photos</option>
+</select>
+<p id="modeInfo" style="color:#777;font-size:12px;margin:7px 0 0">Auto detects flat artwork and preserves thin colored details where possible.</p>
+</div>
 </div>
 <label class="upload" for="file">
 <div class="upload-icon">☁</div>
@@ -81,6 +90,9 @@ const button = document.getElementById('removeBtn');
 const status = document.getElementById('status');
 const providerSelect = document.getElementById('provider');
 const providerInfo = document.getElementById('providerInfo');
+const localModeSelect = document.getElementById('localMode');
+const localModeWrap = document.getElementById('localModeWrap');
+const modeInfo = document.getElementById('modeInfo');
 
 async function loadProviders() {
     try {
@@ -104,6 +116,7 @@ async function loadProviders() {
 }
 
 providerSelect.addEventListener('change', () => {
+    localModeWrap.style.display = providerSelect.value === 'local' ? 'block' : 'none';
     const descriptions = {
         local: 'Runs on this server using the built-in AI models.',
         removebg: 'Uses remove.bg. Preview output uses a limited free-call allowance.',
@@ -111,6 +124,15 @@ providerSelect.addEventListener('change', () => {
         photoroom: 'Uses PhotoRoom background removal API.'
     };
     providerInfo.textContent = descriptions[providerSelect.value] || '';
+});
+
+localModeSelect.addEventListener('change', () => {
+    const descriptions = {
+        auto: 'Automatically detects flat artwork and preserves thin colored details where possible.',
+        graphics: 'For logos, text and drawings on white backgrounds. White-background cleanup is applied more aggressively.',
+        photo: 'Uses the AI masks without the flat-artwork white-background cleanup.'
+    };
+    modeInfo.textContent = descriptions[localModeSelect.value];
 });
 
 loadProviders();
@@ -134,6 +156,7 @@ button.addEventListener('click', async () => {
         const data = new FormData();
         data.append('image', file.files[0]);
         data.append('provider', document.getElementById('provider').value);
+        data.append('mode', localModeSelect.value);
 
         const response = await fetch('/api/remove-background', {
             method: 'POST',
