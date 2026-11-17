@@ -99,6 +99,96 @@ public class BackgroundRemovalService {
     }
 
     /**
+     * Runs inference on overlapping 900px tiles. This gives the fixed-size
+     * ONNX models more source detail while feather-blending overlaps to avoid
+     * visible seams. Used only for Graphics mode and capped to control memory.
+     */
+    private float[][] runModelTiled(
+            OrtSession session,
+            String inputName,
+            String outputName,
+            BufferedImage original,
+            int modelSize) throws Exception {
+
+        final int tileSize = 900;
+        final int overlap = 180;
+        final int feather = 180;
+        int width = original.getWidth();
+        int height = original.getHeight();
+
+        int[] xStarts = tileStarts(width, tileSize, overlap);
+        int[] yStarts = tileStarts(height, tileSize, overlap);
+        float[] accumulated = new float[width * height];
+        float[] totalWeight = new float[width * height];
+
+        for (int y0 : yStarts) {
+            int tileHeight = Math.min(tileSize, height - y0);
+            for (int x0 : xStarts) {
+                int tileWidth = Math.min(tileSize, width - x0);
+                BufferedImage tile = original.getSubimage(x0, y0, tileWidth, tileHeight);
+                float[][] prediction = runModel(
+                        session, inputName, outputName, tile, modelSize);
+
+                for (int ty = 0; ty < tileHeight; ty++) {
+                    float ny = tileHeight <= 1 ? 0f : ty / (float) (tileHeight - 1);
+                    float wy = 1f;
+                    if (y0 > 0) {
+                        wy = Math.min(wy, featherWeight(ty + 1, feather));
+                    }
+                    if (y0 + tileHeight < height) {
+                        wy = Math.min(wy, featherWeight(tileHeight - ty, feather));
+                    }
+
+                    for (int tx = 0; tx < tileWidth; tx++) {
+                        float nx = tileWidth <= 1 ? 0f : tx / (float) (tileWidth - 1);
+                        float wx = 1f;
+                        if (x0 > 0) {
+                            wx = Math.min(wx, featherWeight(tx + 1, feather));
+                        }
+                        if (x0 + tileWidth < width) {
+                            wx = Math.min(wx, featherWeight(tileWidth - tx, feather));
+                        }
+
+                        float weight = Math.max(0.0001f, wx * wy);
+                        int index = (y0 + ty) * width + x0 + tx;
+                        accumulated[index] += sample(prediction, nx, ny) * weight;
+                        totalWeight[index] += weight;
+                    }
+                }
+            }
+        }
+
+        float[][] result = new float[height][width];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int index = y * width + x;
+                result[y][x] = totalWeight[index] > 0f
+                        ? accumulated[index] / totalWeight[index] : 0f;
+            }
+        }
+        return result;
+    }
+
+    private int[] tileStarts(int length, int tileSize, int overlap) {
+        if (length <= tileSize) return new int[]{0};
+        int stride = tileSize - overlap;
+        java.util.ArrayList<Integer> starts = new java.util.ArrayList<>();
+        for (int start = 0; start + tileSize < length; start += stride) {
+            starts.add(start);
+        }
+        int last = length - tileSize;
+        if (starts.isEmpty() || starts.get(starts.size() - 1) != last) {
+            starts.add(last);
+        }
+        return starts.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    private float featherWeight(int distance, int feather) {
+        float t = Math.max(0f, Math.min(1f, distance / (float) feather));
+        return t * t * (3f - 2f * t);
+    }
+
+    /**
      * Converts model output to probabilities without stretching each image's
      * values independently. BiRefNet exports may expose logits, while some
      * exports already include sigmoid; detect the range and handle both.
@@ -416,16 +506,22 @@ public class BackgroundRemovalService {
             throw new IOException("Image is too large. Maximum supported size is 25 megapixels.");
         }
 
-        System.out.println("Running U2NET...");
-        float[][] u2 = toProbabilityMask(runModel(
-                u2Session, u2Input, u2Output, original, U2_SIZE));
+        boolean tiledGraphics = processingMode.equals("graphics") && pixels <= 8_000_000L;
+        System.out.println("Running U2NET" + (tiledGraphics ? " (overlapping tiles)..." : "..."));
+        float[][] u2 = toProbabilityMask(tiledGraphics
+                ? runModelTiled(u2Session, u2Input, u2Output, original, U2_SIZE)
+                : runModel(u2Session, u2Input, u2Output, original, U2_SIZE));
 
-        System.out.println("Running BiRefNet...");
-        float[][] biref = toProbabilityMask(runModel(
-                birefSession, birefInput, birefOutput, original, BIREF_SIZE));
+        System.out.println("Running BiRefNet" + (tiledGraphics ? " (overlapping tiles)..." : "..."));
+        float[][] biref = toProbabilityMask(tiledGraphics
+                ? runModelTiled(birefSession, birefInput, birefOutput, original, BIREF_SIZE)
+                : runModel(birefSession, birefInput, birefOutput, original, BIREF_SIZE));
 
         byte[] whiteRegions = processingMode.equals("photo")
                 ? null : classifyWhiteBorderRegions(original, processingMode.equals("graphics"));
+        if (tiledGraphics) {
+            System.out.println("TILED GRAPHICS INFERENCE ENABLED (900px tiles, 180px overlap)");
+        }
         if (whiteRegions != null) {
             System.out.println("WHITE BACKGROUND CLEANUP ENABLED (" + processingMode + ")");
         } else if (processingMode.equals("graphics")) {
