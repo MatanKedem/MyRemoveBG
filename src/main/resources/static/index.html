@@ -144,7 +144,7 @@ providerSelect.addEventListener('change', () => {
 localModeSelect.addEventListener('change', () => {
     const descriptions = {
         auto: 'Automatically detects flat artwork and preserves thin colored details where possible.',
-        graphics: 'For logos, text and drawings on white backgrounds. White-background cleanup is applied more aggressively.',
+        graphics: 'For logos, text and drawings. All near-white pixels are removed, including white areas enclosed by outlines.',
         photo: 'Uses the AI masks without the flat-artwork white-background cleanup.'
     };
     modeInfo.textContent = descriptions[localModeSelect.value];
