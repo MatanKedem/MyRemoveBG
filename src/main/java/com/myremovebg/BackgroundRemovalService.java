@@ -518,6 +518,10 @@ public class BackgroundRemovalService {
         return state;
     }
 
+    public boolean isReady() {
+        return u2Session != null && birefSession != null;
+    }
+
     public byte[] removeBackground(byte[] bytes) throws Exception {
         return removeBackground(bytes, "auto");
     }
