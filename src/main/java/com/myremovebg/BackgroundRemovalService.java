@@ -291,11 +291,18 @@ public class BackgroundRemovalService {
         int green = (rgb >>> 8) & 255;
         int blue = rgb & 255;
 
-        return alpha > 32
-                && red >= 225 && green >= 225 && blue >= 225
-                && (765 - red - green - blue) <= 75
-                && (Math.max(red, Math.max(green, blue))
-                    - Math.min(red, Math.min(green, blue))) <= 28;
+        int minimum = Math.min(red, Math.min(green, blue));
+        int maximum = Math.max(red, Math.max(green, blue));
+        int chroma = maximum - minimum;
+        int whiteness = 765 - red - green - blue;
+
+        // Catch the light-gray antialias fringe left around artwork as well
+        // as pure white. Keep pale blue logo edges: their channel spread is
+        // intentionally larger than the neutral-gray threshold.
+        boolean neutralFringe = minimum >= 200 && chroma <= 20;
+        boolean nearWhite = minimum >= 225 && whiteness <= 75 && chroma <= 28;
+
+        return alpha > 32 && (neutralFringe || nearWhite);
     }
 
     /**
