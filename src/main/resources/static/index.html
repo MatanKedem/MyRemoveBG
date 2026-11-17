@@ -37,6 +37,7 @@ footer{text-align:center;color:#999;padding:40px;font-size:13px}
 <main>
 <h1>Remove Image Background</h1>
 <div class="subtitle">Remove backgrounds from images automatically with AI.</div>
+<p id="healthStatus" style="margin:-24px auto 28px;color:#16834a;font-size:13px">Checking local AI models...</p>
 <div style="max-width:650px;margin:0 auto 18px;text-align:left">
 <label for="provider" style="display:block;font-weight:bold;margin-bottom:8px">AI engine</label>
 <select id="provider" style="width:100%;padding:13px;border:1px solid #d7dce8;border-radius:9px;background:white;font-size:15px">
@@ -96,6 +97,17 @@ const modeInfo = document.getElementById('modeInfo');
 
 async function loadProviders() {
     try {
+        const healthResponse = await fetch('/api/health');
+        const health = healthResponse.ok ? await healthResponse.json() : null;
+        const healthStatus = document.getElementById('healthStatus');
+        if (health && health.localModelsReady) {
+            healthStatus.textContent = 'Local AI models are ready';
+            healthStatus.style.color = '#16834a';
+        } else {
+            healthStatus.textContent = 'Local AI models are not ready';
+            healthStatus.style.color = '#b45309';
+        }
+
         const response = await fetch('/api/providers');
         if (!response.ok) return;
         const providers = await response.json();
@@ -112,6 +124,9 @@ async function loadProviders() {
         }
     } catch (error) {
         providerInfo.textContent = 'Provider availability could not be checked.';
+        const healthStatus = document.getElementById('healthStatus');
+        healthStatus.textContent = 'Could not check server status';
+        healthStatus.style.color = '#b45309';
     }
 }
 
@@ -164,7 +179,15 @@ button.addEventListener('click', async () => {
         });
 
         if (!response.ok) {
-            throw new Error(await response.text() || 'Processing failed');
+            let message = 'Image processing failed';
+            try {
+                const errorBody = await response.json();
+                message = errorBody.message || errorBody.error || message;
+            } catch (_) {
+                const errorText = await response.text();
+                if (errorText) message = errorText;
+            }
+            throw new Error(message);
         }
 
         const blob = await response.blob();
