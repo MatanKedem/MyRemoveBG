@@ -48,6 +48,33 @@ public class BackgroundController {
                 .body(result);
     }
 
+    @GetMapping("/api/health")
+    public Map<String, Object> health() {
+        boolean ready = localService.isReady();
+        return Map.of(
+                "status", ready ? "ok" : "not_ready",
+                "localModelsReady", ready
+        );
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Invalid request",
+                "message", ex.getMessage() == null ? "Check the submitted image and options." : ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleProcessingError(Exception ex) {
+        System.err.println("Image processing failed: " + ex.getClass().getSimpleName()
+                + ": " + ex.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Image processing failed",
+                "message", "The server could not process this image. Try a smaller image or another engine."
+        ));
+    }
+
     @GetMapping("/api/providers")
     public Map<String, Object> providers() {
         Map<String, Object> result = new LinkedHashMap<>();
