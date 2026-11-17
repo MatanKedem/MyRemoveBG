@@ -523,14 +523,15 @@ public class BackgroundRemovalService {
             }
         }
 
-        // The requested graphics behavior is full white removal, not hole
-        // preservation. Mark every near-white pixel transparent, including
-        // enclosed white regions and small holes inside letters/shapes.
-        for (int index = 0; index < pixelCount; index++) {
-            int x = index % width;
-            int y = index / width;
-            if (isNearWhiteBackgroundPixel(image.getRGB(x, y))) {
-                state[index] = 1;
+        // Only Graphics mode removes enclosed white areas. Auto mode keeps
+        // large enclosed white artwork, preserving its original behavior.
+        if (forceGraphicsMode) {
+            for (int index = 0; index < pixelCount; index++) {
+                int x = index % width;
+                int y = index / width;
+                if (isNearWhiteBackgroundPixel(image.getRGB(x, y))) {
+                    state[index] = 1;
+                }
             }
         }
 
