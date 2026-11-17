@@ -365,9 +365,8 @@ public class BackgroundRemovalService {
      * preserves things such as the white paper inside a bordered card.
      *
      * State values:
-     * 0 = not classified, 1 = exterior background, 2 = small enclosed region,
-     * 3 = large enclosed white foreground,
-     * 4 = non-white artwork foreground (preserved exactly).
+     * 0 = not classified, 1 = transparent near-white background,
+     * 2/3 = temporary enclosed-region states, 4 = non-white artwork foreground.
      */
     private byte[] classifyWhiteBorderRegions(BufferedImage image, boolean forceGraphicsMode) {
         int width = image.getWidth();
@@ -468,7 +467,9 @@ public class BackgroundRemovalService {
             }
         }
 
-        // Large enclosed white areas are part of the foreground (e.g. a white card).
+        // In Graphics mode, white is always treated as background, even when
+        // enclosed by a dark outline (for example, the white interior of a logo
+        // or a bordered card). Non-white strokes and lettering remain foreground.
         int minimumEnclosedArea = Math.max(250, pixelCount / 500);
         for (int start = 0; start < pixelCount; start++) {
             int sx = start % width;
@@ -512,6 +513,17 @@ public class BackgroundRemovalService {
                 for (int i = 0; i < tail; i++) {
                     state[queue[i]] = 3;
                 }
+            }
+        }
+
+        // The requested graphics behavior is full white removal, not hole
+        // preservation. Mark every near-white pixel transparent, including
+        // enclosed white regions and small holes inside letters/shapes.
+        for (int index = 0; index < pixelCount; index++) {
+            int x = index % width;
+            int y = index / width;
+            if (isNearWhiteBackgroundPixel(image.getRGB(x, y))) {
+                state[index] = 1;
             }
         }
 
@@ -590,7 +602,7 @@ public class BackgroundRemovalService {
                     byte region = whiteRegions[y * width + x];
                     if (region == 1) {
                         outputAlpha = 0;
-                    } else if (region == 3 || region == 4) {
+                    } else if (region == 4) {
                         outputAlpha = sourceAlpha;
                     }
                 }
