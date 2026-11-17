@@ -125,12 +125,39 @@ public class BackgroundRemovalService {
             int tileHeight = Math.min(tileSize, height - y0);
             for (int x0 : xStarts) {
                 int tileWidth = Math.min(tileSize, width - x0);
-                BufferedImage tile = original.getSubimage(x0, y0, tileWidth, tileHeight);
+                BufferedImage sourceTile = original.getSubimage(x0, y0, tileWidth, tileHeight);
+
+                // Keep the source aspect ratio. Stretching narrow edge tiles to
+                // a square distorts lettering and symbols near image boundaries.
+                BufferedImage tile = new BufferedImage(
+                        tileSize, tileSize, BufferedImage.TYPE_INT_RGB);
+                Graphics2D tileGraphics = tile.createGraphics();
+                int scaledWidth = Math.max(1, (int) Math.round(
+                        Math.min(tileSize / (double) tileWidth,
+                                 tileSize / (double) tileHeight) * tileWidth));
+                int scaledHeight = Math.max(1, (int) Math.round(
+                        Math.min(tileSize / (double) tileWidth,
+                                 tileSize / (double) tileHeight) * tileHeight));
+                int padLeft = (tileSize - scaledWidth) / 2;
+                int padTop = (tileSize - scaledHeight) / 2;
+                try {
+                    tileGraphics.setColor(Color.WHITE);
+                    tileGraphics.fillRect(0, 0, tileSize, tileSize);
+                    tileGraphics.setRenderingHint(
+                            RenderingHints.KEY_INTERPOLATION,
+                            RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                    tileGraphics.drawImage(sourceTile, padLeft, padTop,
+                            scaledWidth, scaledHeight, null);
+                } finally {
+                    tileGraphics.dispose();
+                }
+
                 float[][] prediction = runModel(
                         session, inputName, outputName, tile, modelSize);
 
                 for (int ty = 0; ty < tileHeight; ty++) {
-                    float ny = tileHeight <= 1 ? 0f : ty / (float) (tileHeight - 1);
+                    float ny = (padTop + (ty + 0.5f) * scaledHeight / tileHeight)
+                            / tileSize;
                     float wy = 1f;
                     if (y0 > 0) {
                         wy = Math.min(wy, featherWeight(ty + 1, feather));
@@ -140,7 +167,8 @@ public class BackgroundRemovalService {
                     }
 
                     for (int tx = 0; tx < tileWidth; tx++) {
-                        float nx = tileWidth <= 1 ? 0f : tx / (float) (tileWidth - 1);
+                        float nx = (padLeft + (tx + 0.5f) * scaledWidth / tileWidth)
+                                / tileSize;
                         float wx = 1f;
                         if (x0 > 0) {
                             wx = Math.min(wx, featherWeight(tx + 1, feather));
@@ -169,7 +197,7 @@ public class BackgroundRemovalService {
         return result;
     }
 
-    private int[] tileStarts(int length, int tileSize, int overlap) {
+    static int[] tileStarts(int length, int tileSize, int overlap) {
         if (length <= tileSize) return new int[]{0};
         int stride = tileSize - overlap;
         java.util.ArrayList<Integer> starts = new java.util.ArrayList<>();
@@ -190,7 +218,7 @@ public class BackgroundRemovalService {
         return starts.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    private float featherWeight(int distance, int feather) {
+    static float featherWeight(int distance, int feather) {
         float t = Math.max(0f, Math.min(1f, distance / (float) feather));
         return t * t * (3f - 2f * t);
     }
@@ -513,7 +541,9 @@ public class BackgroundRemovalService {
             throw new IOException("Image is too large. Maximum supported size is 25 megapixels.");
         }
 
-        boolean tiledGraphics = processingMode.equals("graphics") && pixels <= 8_000_000L;
+        // Three full-resolution float buffers are needed while blending tiles.
+        // Keep this conservative so image processing does not exhaust the JVM heap.
+        boolean tiledGraphics = processingMode.equals("graphics") && pixels <= 4_000_000L;
         System.out.println("Running U2NET" + (tiledGraphics ? " (overlapping tiles)..." : "..."));
         float[][] u2 = toProbabilityMask(tiledGraphics
                 ? runModelTiled(u2Session, u2Input, u2Output, original, U2_SIZE)
