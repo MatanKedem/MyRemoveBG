@@ -179,13 +179,13 @@ button.addEventListener('click', async () => {
         });
 
         if (!response.ok) {
-            let message = 'Image processing failed';
+            const errorText = await response.text();
+            let message = errorText || 'Image processing failed';
             try {
-                const errorBody = await response.json();
+                const errorBody = JSON.parse(errorText);
                 message = errorBody.message || errorBody.error || message;
             } catch (_) {
-                const errorText = await response.text();
-                if (errorText) message = errorText;
+                // Keep the plain-text server message when the body is not JSON.
             }
             throw new Error(message);
         }
