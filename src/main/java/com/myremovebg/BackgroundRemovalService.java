@@ -118,7 +118,9 @@ public class BackgroundRemovalService {
 
         int[] xStarts = tileStarts(width, tileSize, overlap);
         int[] yStarts = tileStarts(height, tileSize, overlap);
-        float[] accumulated = new float[width * height];
+        // Accumulate directly into the returned 2D mask to avoid a third
+        // full-resolution float buffer on top of the weight map.
+        float[][] result = new float[height][width];
         float[] totalWeight = new float[width * height];
 
         for (int y0 : yStarts) {
@@ -179,19 +181,18 @@ public class BackgroundRemovalService {
 
                         float weight = Math.max(0.0001f, wx * wy);
                         int index = (y0 + ty) * width + x0 + tx;
-                        accumulated[index] += sample(prediction, nx, ny) * weight;
+                        result[y0 + ty][x0 + tx] += sample(prediction, nx, ny) * weight;
                         totalWeight[index] += weight;
                     }
                 }
             }
         }
 
-        float[][] result = new float[height][width];
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int index = y * width + x;
                 result[y][x] = totalWeight[index] > 0f
-                        ? accumulated[index] / totalWeight[index] : 0f;
+                        ? result[y][x] / totalWeight[index] : 0f;
             }
         }
         return result;
