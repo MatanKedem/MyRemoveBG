@@ -177,8 +177,15 @@ public class BackgroundRemovalService {
             starts.add(start);
         }
         int last = length - tileSize;
-        if (starts.isEmpty() || starts.get(starts.size() - 1) != last) {
+        if (starts.isEmpty()) {
             starts.add(last);
+        } else if (starts.get(starts.size() - 1) != last) {
+            int previous = starts.get(starts.size() - 1);
+            if (starts.size() > 1 && last - previous < stride) {
+                starts.set(starts.size() - 1, last);
+            } else {
+                starts.add(last);
+            }
         }
         return starts.stream().mapToInt(Integer::intValue).toArray();
     }
