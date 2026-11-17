@@ -205,15 +205,10 @@ public class BackgroundRemovalService {
             starts.add(start);
         }
         int last = length - tileSize;
-        if (starts.isEmpty()) {
+        // Always append the final tile instead of moving an earlier tile.
+        // Replacing the previous start can leave an uncovered strip.
+        if (starts.isEmpty() || starts.get(starts.size() - 1) != last) {
             starts.add(last);
-        } else if (starts.get(starts.size() - 1) != last) {
-            int previous = starts.get(starts.size() - 1);
-            if (starts.size() > 1 && last - previous < stride) {
-                starts.set(starts.size() - 1, last);
-            } else {
-                starts.add(last);
-            }
         }
         return starts.stream().mapToInt(Integer::intValue).toArray();
     }
