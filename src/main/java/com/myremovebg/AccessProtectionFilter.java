@@ -15,8 +15,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 
 /**
- * Protects the whole web app with HTTP Basic authentication and applies a
- * conservative global quota to background-removal requests.
+ * Protects the whole web app with HTTP Basic authentication.
  *
  * Set MYREMOVEBG_ACCESS_PASSWORD in the server environment before starting
  * the app. The password is never stored in source control.
@@ -26,13 +25,7 @@ import java.util.Base64;
 public class AccessProtectionFilter extends OncePerRequestFilter {
 
     private static final String USERNAME = "myremovebg";
-    private static final int MAX_PER_MINUTE = 5;
-    private static final int MAX_PER_DAY = 30;
-
-    private long minuteWindow = System.currentTimeMillis() / 60_000L;
-    private long dayWindow = System.currentTimeMillis() / 86_400_000L;
-    private int minuteCount;
-    private int dayCount;
+    private static final int PASSWORD_LENGTH = 6;
 
     @Override
     protected void doFilterInternal(
@@ -41,37 +34,23 @@ public class AccessProtectionFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
 
         String configuredPassword = System.getenv("MYREMOVEBG_ACCESS_PASSWORD");
-        if (configuredPassword == null || configuredPassword.length() < 16) {
+        if (configuredPassword == null || configuredPassword.length() != PASSWORD_LENGTH) {
             response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
             response.setContentType("text/plain");
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
             response.getWriter().write(
                     "MyRemoveBG is locked: configure MYREMOVEBG_ACCESS_PASSWORD "
-                    + "with at least 16 characters in the server environment.");
+                    + "with exactly 6 characters in the server environment.");
             return;
         }
 
         if (!isAuthorized(request, configuredPassword)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setHeader("WWW-Authenticate", "Basic realm=\"MyRemoveBG\", charset=\"UTF-8\"");
+            response.setHeader("WWW-Authenticate", "Basic realm=\\"MyRemoveBG\\", charset=\\"UTF-8\\"");
             response.setHeader("Cache-Control", "no-store");
             response.setContentType("text/plain");
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
             response.getWriter().write("Authentication required.");
-            return;
-        }
-
-        if ("POST".equalsIgnoreCase(request.getMethod())
-                && "/api/remove-background".equals(request.getRequestURI())
-                && !allowProcessingRequest()) {
-            response.setStatus(429);
-            response.setHeader("Retry-After", "60");
-            response.setHeader("Cache-Control", "no-store");
-            response.setContentType("text/plain");
-            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            response.getWriter().write(
-                    "Usage limit reached. MyRemoveBG allows up to 5 requests per minute "
-                    + "and 30 requests per day.");
             return;
         }
 
@@ -104,28 +83,5 @@ public class AccessProtectionFilter extends OncePerRequestFilter {
         } catch (IllegalArgumentException ex) {
             return false;
         }
-    }
-
-    private synchronized boolean allowProcessingRequest() {
-        long now = System.currentTimeMillis();
-        long currentMinute = now / 60_000L;
-        long currentDay = now / 86_400_000L;
-
-        if (currentMinute != minuteWindow) {
-            minuteWindow = currentMinute;
-            minuteCount = 0;
-        }
-        if (currentDay != dayWindow) {
-            dayWindow = currentDay;
-            dayCount = 0;
-        }
-
-        if (minuteCount >= MAX_PER_MINUTE || dayCount >= MAX_PER_DAY) {
-            return false;
-        }
-
-        minuteCount++;
-        dayCount++;
-        return true;
     }
 }
