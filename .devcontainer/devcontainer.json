@@ -5,6 +5,12 @@
     "--device=/dev/net/tun"
   ],
   "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "25",
+      "jdk": true,
+      "installMaven": true,
+      "installGradle": false
+    },
     "ghcr.io/tailscale/codespace/tailscale": {
       "version": "latest"
     }
