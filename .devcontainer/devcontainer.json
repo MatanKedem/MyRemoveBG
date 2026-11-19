@@ -4,10 +4,12 @@
   "runArgs": [
     "--device=/dev/net/tun"
   ],
+  "containerEnv": {
+    "DISABLE_JAVA_BUILD": "true"
+  },
   "features": {
     "ghcr.io/devcontainers/features/java:1": {
       "version": "25",
-      "jdk": true,
       "installMaven": true,
       "installGradle": false
     },
