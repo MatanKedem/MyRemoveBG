@@ -46,7 +46,7 @@ public class AccessProtectionFilter extends OncePerRequestFilter {
 
         if (!isAuthorized(request, configuredPassword)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setHeader("WWW-Authenticate", "Basic realm=\\"MyRemoveBG\\", charset=\\"UTF-8\\"");
+            response.setHeader("WWW-Authenticate", "Basic realm=MyRemoveBG");
             response.setHeader("Cache-Control", "no-store");
             response.setContentType("text/plain");
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());
