@@ -610,7 +610,10 @@ public class BackgroundRemovalService {
                     byte region = whiteRegions[y * width + x];
                     if (region == 1) {
                         outputAlpha = 0;
-                    } else if (region == 4) {
+                    } else if (region == 3 || region == 4) {
+                        // Large enclosed white regions remain foreground in
+                        // Auto mode; Graphics mode has already changed them
+                        // to state 1 (transparent).
                         outputAlpha = sourceAlpha;
                     }
                 }
